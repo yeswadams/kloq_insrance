@@ -1,9 +1,12 @@
 import { jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { agents } from "./agents";
 import { fleetProposals } from "./proposals";
+import { conversations } from "./conversations";
 export const agentExecutions = pgTable("agent_executions", {
   id: text("id").primaryKey(), agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
-  proposalId: text("proposal_id").notNull().references(() => fleetProposals.id, { onDelete: "cascade" }), status: text("status").notNull().default("PENDING"),
+  proposalId: text("proposal_id").references(() => fleetProposals.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("PENDING"),
   input: jsonb("input").$type<Record<string, unknown>>().notNull().default({}), output: jsonb("output").$type<Record<string, unknown>>(), error: text("error"),
   startedAt: timestamp("started_at"), completedAt: timestamp("completed_at"), createdAt: timestamp("created_at").notNull().defaultNow(),
 });
