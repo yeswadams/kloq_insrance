@@ -6,6 +6,15 @@ import * as schema from "@/app/db/schema";
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  appName: "Kloq Insurance",
+  advanced: {
+    database: {
+      joins: true,
+    },
+    ipAddress: {
+      ipAddressHeaders: ["x-vercel-forwarded-for", "x-forwarded-for"],
+    },
+  },
   plugins: [
     dash({
       apiKey: process.env.BETTER_AUTH_API_KEY,
