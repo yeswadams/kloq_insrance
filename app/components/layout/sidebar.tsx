@@ -1,0 +1,4 @@
+import Link from "next/link";
+import { Activity, Bot, ClipboardList, FileClock, LayoutDashboard, ShieldCheck } from "lucide-react";
+const items = [["Overview", "/dashboard", LayoutDashboard], ["Proposals", "/proposals", ClipboardList], ["Agents", "/agents", Bot], ["Audit Logs", "/audit-logs", FileClock], ["Connectors", "/connectors", Activity]] as const;
+export function Sidebar() { return <aside className="sidebar"><Link href="/dashboard" className="brand"><span className="brand-mark"><ShieldCheck size={20}/></span><span>KLOQ<span className="brand-sub">UNDERWRITING</span></span></Link><div className="workspace-label">WORKSPACE</div><nav>{items.map(([label, href, Icon]) => <Link className="nav-link" href={href} key={href}><Icon size={18}/>{label}</Link>)}</nav><div className="sidebar-footer"><span className="status-dot"/> Development workspace</div></aside>; }

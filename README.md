@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kloq Insurance Underwriting Workspace
 
-## Getting Started
+This Next.js application includes an agent workspace with a remote E2B Chromium browser for the fictional Qlo-Africa KRA verification portal.
 
-First, run the development server:
+## Development
+
+Configure `.env`, then run:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm db:migrate
+pnpm db:seed
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Remote browser demo setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The browser runs in E2B and cannot access the developer machine's `localhost`. Set these server-only environment variables:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `E2B_API_KEY`: an E2B API key.
+- `MOCK_PORTAL_BASE_URL`: a public HTTPS origin for this app, without a path suffix (for example, `https://your-deployment.example`). The `/mock/kra` route must be reachable without app sign-in or deployment protection.
 
-## Learn More
+Use a deployed HTTPS URL, or expose local port 3000 through an HTTPS tunnel. For example, with Cloudflare Tunnel installed, run `cloudflared tunnel --url http://localhost:3000`, then set `MOCK_PORTAL_BASE_URL` to the generated `https://...trycloudflare.com` origin. Never set this value to localhost. Restart Next.js after changing environment values.
 
-To learn more about Next.js, take a look at the following resources:
+Open `/agents`, select an enabled agent, and submit a tax verification request in its workspace. `/mock/kra` also has a form for manually looking up the deterministic demo records. The portal and its data are fictional and not connected to KRA or another government system.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+If E2B or the public portal URL is missing, or if the portal is unreachable, the browser tool reports a controlled failure. The agent then records that no compliance conclusion was made.

@@ -1,0 +1,12 @@
+import { mockKraRecords } from "@/app/demo/mock-kra-data";
+
+export default async function MockKraPortal({ searchParams }: { searchParams: Promise<{ kraPin?: string }> }) {
+  const { kraPin = "" } = await searchParams;
+  const normalizedPin = kraPin.trim().toUpperCase();
+  const record = normalizedPin ? mockKraRecords[normalizedPin as keyof typeof mockKraRecords] : null;
+  const result = record ? { kraPin: normalizedPin, ...record } : normalizedPin ? { kraPin: normalizedPin, companyName: null, status: "NO_RECORD", obligations: [], lastFiling: "No filing record found" } : null;
+  return <main className="mock-portal"><header><span className="mock-crest">Q</span><div><strong>Qlo-Africa Verification Environment</strong><small>Commercial insurance · Taxpayer verification</small></div><span className="mock-label">FICTIONAL DEMO PORTAL</span></header><section className="mock-card"><p className="eyebrow">DETERMINISTIC REGULATORY DEMO</p><h1>KRA Tax Compliance Verification</h1><p className="muted">Fictional verification data for the Qlo-Africa hackathon. This portal is not operated by or connected to the Kenya Revenue Authority.</p>
+    <form method="get" action="/mock/kra" className="mock-lookup"><label htmlFor="kraPin">KRA PIN</label><div><input id="kraPin" name="kraPin" placeholder="e.g. P051234567A" defaultValue={kraPin} autoComplete="off"/><button className="button primary" data-testid="kra-submit" type="submit">Verify PIN</button></div></form>
+    {result && <section className="mock-result" data-testid="verification-result" data-record={JSON.stringify(result)} aria-live="polite"><div className="section-heading-row"><div><p className="eyebrow">PORTAL RESPONSE</p><h2>Taxpayer record</h2></div><span className={`state-pill ${result.status === "COMPLIANT" ? "enabled" : "disabled"}`}>{result.status.replaceAll("_", " ")}</span></div><dl className="details"><div><dt>Company</dt><dd>{result.companyName ?? "No matching taxpayer record"}</dd></div><div><dt>KRA PIN</dt><dd>{result.kraPin}</dd></div><div><dt>Status</dt><dd>{result.status.replaceAll("_", " ")}</dd></div><div><dt>Tax obligations</dt><dd>{result.obligations.length ? result.obligations.join(" · ") : "No obligations listed"}</dd></div><div><dt>Last filing</dt><dd>{result.lastFiling}</dd></div></dl><p className="mock-footnote">QLO-AFRICA VERIFICATION ENVIRONMENT · FICTIONAL DATA · NOT A GOVERNMENT SYSTEM</p></section>}
+  </section></main>;
+}
