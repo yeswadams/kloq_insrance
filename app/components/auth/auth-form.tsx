@@ -9,6 +9,7 @@ import { register } from "module";
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const signup = mode === "sign-up";
   const [showPassword, setShowPassword] = useState(false);
@@ -73,7 +74,13 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
               </button>
             </div>
           </label>
-          <button  className='bg-[#176c5d] text-white py-2 rounded-lg shadow-sm' type="submit">{signup ? "Register" : "Login"}</button>
+          <button
+            className="bg-[#176c5d] text-white py-2 rounded-lg shadow-sm"
+            type="submit"
+            onClick={() => setIsLoading(true)}
+          >
+            {isLoading ? (signup ? "Creating your account..." : "Logging in ..." ) : (signup ? "Register" : "Login")}
+          </button>
         </form>
         <p className="auth-switch">
           {signup ? "Already have an account?" : "New to Kloq?"}{" "}
