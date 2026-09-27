@@ -3,7 +3,6 @@ import postgres from "postgres";
 import { randomUUID } from "node:crypto";
 
 const url = process.env.DATABASE_URL;
-console.log(url);
 if (!url) throw new Error("DATABASE_URL is required");
 const sql = postgres(url, { max: 1 });
 const seededAgents = [
@@ -35,6 +34,7 @@ const seededAgents = [
 try {
   for (const [name, slug, description, type] of seededAgents)
     await sql`insert into agents (id,name,slug,description,type,instructions,enabled,configuration) values (${randomUUID()},${name},${slug},${description},${type},'',true,'{}'::jsonb) on conflict (slug) do nothing`;
+  await sql`update agents set instructions=${"Verify a supplied KRA PIN using the registered browser capability against the deterministic mock tax portal. Report only the portal record as evidence, explain its status and listed obligations, and leave all underwriting decisions to the human underwriter."} where slug='kra-tax-verification' and instructions=''`;
   const proposals = [
     ["Savannah Freight Services Ltd", "P051234567A", 42, "UNDER_REVIEW"],
     ["Highland Produce Transport Ltd", "P051234568B", 18, "PENDING"],
