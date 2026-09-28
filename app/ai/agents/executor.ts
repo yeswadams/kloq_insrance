@@ -83,7 +83,7 @@ export async function executeAgent(
 }
 
 /** Conversation execution shares the same validated execution/findings tables as proposal runs. */
-export async function executeAgentTask(agentId: string, conversationId: string, task: string, mode: AgentExecutionMode = "auto", proposal?: { id: string; companyName: string; kraPin: string; fleetSize: number } | null):
+export async function executeAgentTask(agentId: string, conversationId: string, task: string, mode: AgentExecutionMode = "auto", proposal?: { id: string; companyName: string; kraPin: string; fleetSize: number } | null, onEvent?: (event: RuntimeEvent) => void):
 Promise<AgentExecutionOutcome & { events: RuntimeEvent[] }> {
   const [agentRecord] = await db.select().from(agents).where(eq(agents.id, agentId)).limit(1);
   if (!agentRecord) throw new Error("Agent was not found");
@@ -91,7 +91,7 @@ Promise<AgentExecutionOutcome & { events: RuntimeEvent[] }> {
   const id = randomUUID();
   await db.insert(agentExecutions).values({ id, agentId, conversationId, proposalId: proposal?.id ?? null, status: "RUNNING", startedAt: new Date(), input: { task, conversationId, mode, proposalId: proposal?.id ?? null } });
   try {
-    const execution = await runAgentTask({ agent: agentRecord, task, proposal, mode });
+    const execution = await runAgentTask({ agent: agentRecord, task, proposal, mode, onEvent });
     const result = agentResultSchema.parse(execution.result);
     const status = result.success ? "COMPLETED" : "FAILED";
     await db.transaction(async (tx) => {

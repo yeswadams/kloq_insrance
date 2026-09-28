@@ -17,7 +17,10 @@ pnpm dev
 The browser runs in E2B and cannot access the developer machine's `localhost`. Set these server-only environment variables:
 
 - `E2B_API_KEY`: an E2B API key.
+- `E2B_BROWSER_TEMPLATE`: the E2B template containing Chromium and Playwright, rebuilt with envd `v0.2.0` or newer for secured access. The default name is `playwright-chromium`.
 - `MOCK_PORTAL_BASE_URL`: a public HTTPS origin for this app, without a path suffix (for example, `https://your-deployment.example`). The `/mock/kra` route must be reachable without app sign-in or deployment protection.
+
+If E2B returns “Template is not compatible with secured access,” rebuild that template in E2B using an envd version `v0.2.0` or newer, then set `E2B_BROWSER_TEMPLATE` in Vercel to the rebuilt template name and redeploy. The app keeps secured access enabled; disabling it is not recommended for production.
 
 Use a deployed HTTPS URL, or expose local port 3000 through an HTTPS tunnel. For example, with Cloudflare Tunnel installed, run `cloudflared tunnel --url http://localhost:3000`, then set `MOCK_PORTAL_BASE_URL` to the generated `https://...trycloudflare.com` origin. Never set this value to localhost. Restart Next.js after changing environment values.
 

@@ -8,6 +8,7 @@ import type { BrowserAction } from "@/app/ai/tools/browser/adapters/browser-adap
 import { isBrowserRuntimeConfigured } from "@/app/ai/tools/browser/config";
 
 export type RuntimeEvent = { type: string; message: string; data?: Record<string, unknown> };
+type RuntimeEventHandler = (event: RuntimeEvent) => void;
 const plannerSchema = z.object({ needsExternalVerification: z.boolean(), explanation: z.string().min(1), capability: z.string().nullable() }).strict();
 const kraRecordSchema = z.object({
   kraPin: z.string(), companyName: z.string().nullable(), status: z.enum(["COMPLIANT", "NON_COMPLIANT", "PENDING_REVIEW", "NO_RECORD"]),
@@ -61,6 +62,7 @@ export async function runAgentTask(input: {
   task: string;
   proposal?: { id: string; companyName: string; kraPin: string; fleetSize: number } | null;
   mode?: "auto" | "mock" | "groq";
+  onEvent?: RuntimeEventHandler;
 }): Promise<{ result: AgentResult; events: RuntimeEvent[] }> {
   registerBrowserTool();
   const registered = listTools();
@@ -91,36 +93,38 @@ export async function runAgentTask(input: {
     { type: "capability_check", message: `Checking available capabilities for ${input.agent.name}.` },
     { type: "tools_discovered", message: availableTools.length ? `Available tools: ${availableTools.map((tool) => tool.name).join(", ")}.` : "No tools are currently enabled for this agent." },
   ];
-  if (input.proposal) events.push({ type: "proposal_context", message: `Using proposal context for ${input.proposal.companyName}.`, data: { proposalId: input.proposal.id } });
+  for (const event of events) input.onEvent?.(event);
+  const emit = (event: RuntimeEvent) => { events.push(event); input.onEvent?.(event); };
+  if (input.proposal) emit({ type: "proposal_context", message: `Using proposal context for ${input.proposal.companyName}.`, data: { proposalId: input.proposal.id } });
 
   if (!plan.needsExternalVerification) {
     const result = agentResultSchema.parse({ success: true, output: { summary: "No external verification was requested.", finding: "No external verification finding was generated.", recommendation: "NOT_APPLICABLE", rationale: "This task did not require a registered external capability.", reasoning: "No external tool evidence was requested or gathered.", nextAction: "Provide a verification task if you need a portal lookup." }, findings: [], evidence: [] });
-    events.push({ type: "finding_generated", message: "No external verification finding was needed." });
+    emit({ type: "finding_generated", message: "No external verification finding was needed." });
     return { result, events };
   }
 
   const browser = registered.find((tool) => tool.capability === "browser");
   if (disabled.includes("browser") || !availableTools.some((tool) => tool.capability === "browser") || !browser) {
     const message = "This task requires browser verification, but the required capability is currently unavailable for this agent.";
-    events.push({ type: "capability_unavailable", message });
-    events.push({ type: "finding_generated", message: "No compliance conclusion was made." });
+    emit({ type: "capability_unavailable", message });
+    emit({ type: "finding_generated", message: "No compliance conclusion was made." });
     return { result: failedResult(message, "Enable the Browser capability for this agent, then retry the verification.", "CAPABILITY_UNAVAILABLE"), events };
   }
   if (!isBrowserRuntimeConfigured()) {
     const message = "This task requires browser verification, but the E2B browser or public mock portal is not configured.";
-    events.push({ type: "capability_unavailable", message });
-    events.push({ type: "finding_generated", message: "No compliance conclusion was made." });
+    emit({ type: "capability_unavailable", message });
+    emit({ type: "finding_generated", message: "No compliance conclusion was made." });
     return { result: failedResult(message, "Configure E2B_API_KEY and a publicly reachable HTTPS MOCK_PORTAL_BASE_URL, then retry.", "CAPABILITY_UNAVAILABLE"), events };
   }
 
   const pin = extractPin(input.task) || input.proposal?.kraPin || "";
   if (!pin) {
     const message = "A KRA PIN is required to run this tax verification.";
-    events.push({ type: "task_input_missing", message });
+    emit({ type: "task_input_missing", message });
     return { result: failedResult(message, "Provide the taxpayer KRA PIN and retry.", "MISSING_VERIFICATION_INPUT"), events };
   }
 
-  events.push({ type: "capability_selected", message: "Available capability selected: Browser", data: { capability: browser.capability, tool: browser.slug } });
+  emit({ type: "capability_selected", message: "Available capability selected: Browser", data: { capability: browser.capability, tool: browser.slug } });
   const actions: BrowserAction[] = [
     { action: "navigate", url: "/mock/kra" },
     { action: "inspect" },
@@ -130,25 +134,25 @@ export async function runAgentTask(input: {
   ];
   let toolResult;
   try {
-    toolResult = await executeTool(browser.slug, { actions, query: { kraPin: pin } }, (event) => events.push(event));
+    toolResult = await executeTool(browser.slug, { actions, query: { kraPin: pin } }, emit);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Browser verification failed.";
-    events.push({ type: "tool_failed", message });
-    events.push({ type: "finding_generated", message: "No compliance conclusion was made because the portal could not be verified." });
+    emit({ type: "tool_failed", message });
+    emit({ type: "finding_generated", message: "No compliance conclusion was made because the portal could not be verified." });
     return { result: failedResult("The verification portal could not be reached or browser execution failed. No compliance conclusion was made.", "Confirm the public portal URL and E2B configuration, then retry.", "VERIFICATION_UNAVAILABLE"), events };
   }
 
-  events.push({ type: "evidence_collected", message: "Evidence collected from the rendered mock portal page.", data: { source: toolResult.source, url: (toolResult.result as { url?: string }).url, query: toolResult.query } });
+  emit({ type: "evidence_collected", message: "Evidence collected from the rendered mock portal page.", data: { source: toolResult.source, url: (toolResult.result as { url?: string }).url, query: toolResult.query } });
   const portalDataValue = (toolResult.result as { structuredRecord?: Record<string, unknown> | null }).structuredRecord;
   const parsedRecord = kraRecordSchema.safeParse(portalDataValue);
   if (!toolResult.success || !parsedRecord.success) {
     const failure = failedResult("The browser opened the verification portal but could not extract a matching result. No compliance conclusion was made.", "Retry the lookup or request supporting tax evidence from the applicant.", "VERIFICATION_RESULT_UNAVAILABLE");
-    events.push({ type: "tool_failed", message: "The portal page did not contain a structured verification result." });
+    emit({ type: "tool_failed", message: "The portal page did not contain a structured verification result." });
     return { result: failure, events };
   }
 
   const evidence: AgentEvidence[] = toolResult.evidence.map((item) => ({ source: item.source, detail: item.description.slice(0, 1200), reference: item.reference ?? "" }));
-  events.push({ type: "analyzing_evidence", message: "Analyzing the portal result against the task." });
+  emit({ type: "analyzing_evidence", message: "Analyzing the portal result against the task." });
   let result = recordResult(parsedRecord.data, evidence);
   if ((input.mode === "groq" || (input.mode !== "mock" && !!process.env.GROQ_API_KEY))) {
     try {
@@ -168,6 +172,6 @@ export async function runAgentTask(input: {
       });
     } catch { /* Keep the deterministic evidence-grounded explanation if model reasoning fails. */ }
   }
-  events.push({ type: "finding_generated", message: result.output.finding });
+  emit({ type: "finding_generated", message: result.output.finding });
   return { result, events };
 }

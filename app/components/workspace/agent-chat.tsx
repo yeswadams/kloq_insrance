@@ -18,15 +18,42 @@ export function AgentChat({ agentId, proposalId, proposalName, conversationId, i
     const content = text.trim();
     if (!content || busy) return;
     setBusy(true); setError(""); setText("");
-    setMessages((items) => [...items, { id: `pending-${Date.now()}`, role: "user", content, events: [] }]);
+    const userPendingId = `pending-user-${Date.now()}`;
+    const pendingId = `pending-agent-${Date.now()}`;
+    setMessages((items) => [...items, { id: userPendingId, role: "user", content, events: [] }, { id: pendingId, role: "assistant", content: "", events: [] }]);
     try {
       const response = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agentId, proposalId, conversationId: currentConversation, content }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Unable to send message");
-      setCurrentConversation(data.conversationId);
-      setMessages((items) => [...items.filter((message) => !message.id.startsWith("pending-")), data.message]);
-      if (!currentConversation) router.replace(`/agents/${agentId}/workspace?conversationId=${data.conversationId}${proposalId ? `&proposalId=${proposalId}` : ""}`);
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error ?? "Unable to send message");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finished = false;
+      while (!finished) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const frames = buffer.split("\n\n"); buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const type = frame.match(/^event: (.+)$/m)?.[1];
+          const raw = frame.match(/^data: (.+)$/m)?.[1];
+          if (!type || !raw) continue;
+          const payload = JSON.parse(raw);
+          if (type === "progress") {
+            setMessages((items) => items.map((message) => message.id === pendingId ? { ...message, events: [...message.events, payload] } : message));
+          } else if (type === "complete") {
+            setCurrentConversation(payload.conversationId);
+            setMessages((items) => [...items.filter((message) => message.id !== pendingId && message.id !== userPendingId), { id: userPendingId, role: "user", content, events: [] }, payload.message]);
+            if (!currentConversation) router.replace(`/agents/${agentId}/workspace?conversationId=${payload.conversationId}${proposalId ? `&proposalId=${proposalId}` : ""}`);
+            finished = true;
+          } else if (type === "error") throw new Error(payload.error ?? "The agent could not complete the task.");
+        }
+        if (done) break;
+      }
+      if (!finished) throw new Error("The agent connection ended before the task completed. Retry the task.");
     } catch (cause) {
+      setMessages((items) => items.filter((message) => message.id !== pendingId && message.id !== userPendingId));
       setError(cause instanceof Error ? cause.message : "Unable to send message");
     } finally { setBusy(false); }
   }
@@ -40,6 +67,7 @@ export function AgentChat({ agentId, proposalId, proposalName, conversationId, i
           <div className="chat-role">{message.role === "user" ? "YOU" : "AGENT"}</div>
           {message.role === "assistant" ? <>
             {message.events.map((event, index) => <div className={`runtime-event event-${String(event.type ?? "activity")}`} key={`${message.id}-${index}`}><span className="event-check">{String(event.type).includes("failed") || String(event.type).includes("unavailable") ? "!" : "✓"}</span><div><strong>{String(event.message ?? "Agent activity")}</strong>{event.type === "evidence_collected" && typeof (event.data as Record<string, unknown> | undefined)?.url === "string" && <a className="text-link event-link" href={String((event.data as Record<string, unknown>).url)} target="_blank" rel="noreferrer">Open mock portal ↗</a>}</div></div>)}
+            {!message.content && <div className="runtime-event"><span className="thinking-dot"/><div><strong>{message.events.length ? "Task in progress…" : "Preparing agent task…"}</strong></div></div>}
             <div className="assistant-answer">{message.content.split(/\n\n/).map((section, index) => { const [heading, ...lines] = section.split("\n"); return <section className="answer-section" key={index}><h3>{heading}</h3><p>{lines.join("\n")}</p></section>; })}</div>
             {message.agentExecutionId && <div className="execution-reference">EXECUTION {message.agentExecutionId}</div>}
           </> : <p>{message.content}</p>}

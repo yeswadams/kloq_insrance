@@ -75,7 +75,9 @@ export class E2BBrowserAdapter implements BrowserAdapter {
     const actions = input.actions.map((action) => action.action === "navigate" && action.url.startsWith("/mock/") ? { ...action, url: `${baseUrl}${action.url}` } : action);
     let sandbox: Sandbox | undefined;
     try {
-      sandbox = await Sandbox.create("playwright-chromium", { timeoutMs: 90_000 });
+      // E2B v2 enforces secured envd access. Configure this to a template rebuilt
+      // with envd >= 0.2.0; old templates fail during sandbox startup.
+      sandbox = await Sandbox.create(process.env.E2B_BROWSER_TEMPLATE || "playwright-chromium", { timeoutMs: 90_000 });
       onEvent?.({ type: "browser_started", message: "Browser started in an E2B sandbox." });
       await sandbox.files.write("/app/qlo-browser.cjs", script);
       await sandbox.files.write("/app/qlo-browser-input.json", JSON.stringify({ actions }));
